@@ -1,0 +1,889 @@
+---
+title: "DATA2020FinalProject_plan"
+author: "Hanjun Wei, Keying Gong, Yurui Zhang"
+date: "4/26/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+title: "DATA2020FinalProject_plan"
+author: "Hanjun Wei, Keying Gong, Yurui Zhang"
+date: "4/26/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### Data
+
+The data our group uses is the Police Shootings in the US: <https://www.washingtonpost.com/graphics/investigations/police-shootings-database/>
+
+### Question
+
+Our target question: What will the total number of fatal shootings by on duty police officers all over the united states next month? 
+
+### Our brief plan
+
+The objective we are interested in:
+1. Analyze historical fatal shootings based on demographic groups
+2. predict 2022 fatal shootings using time-series model for the whole population and for different racial groups
+
+#### Step 1: data cleaning and conduct feature engineering 
+#### Step 2: Exploratory Data Analysis on the police shooting dataset. Discover interesting patterns
+#### Step 3: Compare race composition of each state VS. fatal shootings race composition by state
+#### Step 4:
+
+(Time Series Modeling)
+build ARIMA model to predict 2022 fatal shootings using time-series model for the whole population and for different racial groups
+
+
+(Racial Mixed Effect Modeling)
+Reconstruct the dataset in terms of Race. 
+
+
+Feature #1 is Racial Category, which includes 7 types of race.
+
+
+Feature #2 is Number of Fatal Shooting at each time stamp, count the total number of fatal shootings in a given time interval.
+
+
+Feature #3 is Time Stamp, month and year.
+Construct a mixed effect modeling in terms of the number of fatal shootings.
+
+
+(State Mixed Effect Modeling)
+Reconstruct the dataset in terms of State. 
+
+
+Feature #1 is State Category, which includes 50 types of state.
+
+
+Feature #2 is Number of Fatal Shooting at each time stamp, count the total number of fatal shootings in a given time interval.
+
+
+Feature #3 is Time Stamp, month and year.
+Construct a mixed effect modeling in terms of the number of fatal shootings.
+
+
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Load the needed packages
+library(dplyr)
+library(caret)
+library(glmnet)
+library(MASS)
+library(InformationValue)
+library(tidyverse)
+library(naniar)
+library(ggplot2)
+library(lubridate)
+library(visdat)
+library(finalfit)
+library(GGally)
+library(ggmap)
+library(tidygeocoder)
+library(usmap)
+library(reshape2)
+```
+
+### Data Cleaning first
+
+First thing first, read the data into the file.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Load the needed dataset
+data_shoot <- read_csv("/Users/hanjunwei/Desktop/DATA 2020/Project/fatal-police-shootings-data.csv")
+
+# make a copy of the readed in data just in case
+data_shoot_not_change <- data_shoot
+```
+
+Print out the first 10 rows to better understand the data.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+head(data_shoot, 10)
+```
+
+Looks good to me.
+
+let us print the names of all of the columns to see if it matches our key table.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+names(data_shoot)
+```
+
+Then after we read in the data, we can take a look at some characteristic of the data, First of all, we print out the shape of the data.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+print(dim(data_shoot))
+view(data_shoot)
+
+library(dplyr) 
+dim(data_shoot %>% distinct())
+```
+
+We have 7291 rows and 17 columns.
+
+we want to know the exact percentage of missing value in each columns, so we print out the percentage of not missing values in our datasets.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Missing data - to check the percent of not missing data points in each columns
+apply(data_shoot, 2, function(x) sum(complete.cases(x))/nrow(data_shoot))
+```
+
+From the plot, we can see that there are missing values in name, armed, age, gender, race, flee, longitude, and latitude.
+
+Then we will run the missing pattern plots to take a better look at the missineness.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+vis_miss(data_shoot)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+missing_pattern(data_shoot)
+```
+
+For our variable "id", from the code book, this should be the continuous variable that contains the id information.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# For our variable manner_of_death
+length(unique(data_shoot$id))
+```
+
+For our variable "name", from the code book, this should be the categorical variable that contains the id information.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# For our variable name
+length(unique(data_shoot$name))
+```
+
+For our variable "date", from the code book, this should be the date variable. So we add the Year, Month and WeekDay new variables.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# For our variable manner_of_death
+length(unique(data_shoot$date))
+
+data_shoot$Year <- year(data_shoot$date)
+data_shoot$Month <- month(data_shoot$date)
+data_shoot$WeekDay <- weekdays(data_shoot$date)
+
+data_shoot$Year <- as.factor(data_shoot$Year)
+data_shoot$Month <- as.factor(data_shoot$Month)
+data_shoot$WeekDay <- as.factor(data_shoot$WeekDay)
+
+```
+
+For our variable "manner_of_death", from the code book, this should be the categorical variable.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# For our variable manner_of_death
+unique(data_shoot$manner_of_death)
+data_shoot$manner_of_death <- as.factor(data_shoot$manner_of_death)
+```
+
+For our variable "armed", from the code book, this should be the categorical variable.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# For our variable armed
+# long_dis_death, long_dis_not_death, short_dis_death, short_dis_not_death,
+
+
+long_dis_death <- c("gun","guns and explosives","crossbow","gun and knife","hatchet and gun","machete and gun","gun and sword","gun and car","pellet gun","bow and arrow","gun and vehicle","vehicle and gun","grenade","air pistol","gun and machete")
+long_dis_not_death <- c("toy weapon","nail gun","BB gun","Taser","bean-bag gun","hand torch","pepper spray","fireworks","incendiary device","Airsoft pistol")
+short_dis_death <- c("knife","hatchet","sword","machete","sharp object","meat cleaver","straight edge razor","ax","chain saw","scissors","pick-axe","spear","pitchfork","glass shard","metal rake","pole and knife","chainsaw","samurai sword","baseball bat and knife","ice pick","machete and hammer")
+short_dis_not_death <- c("shovel","hammer","box cutter","metal object","screwdriver","lawn mower blade","flagpole","cordless drill","metal pole","metal pipe","metal hand tool","blunt object","metal stick","chain","contractor's level","railroad spikes","stapler","beer bottle","binoculars","baseball bat and fireplace poker","brick","baseball bat","garden tool","pipe","flashlight","baton","chair","rock","piece of wood","pole","crowbar","oar","tire iron","air conditioner","baseball bat and bottle","pen","wrench","walking stick","barstool","wasp spray","bottle","microphone","stake")
+vehicles <- c("vehicle","carjack","motorcycle","BB gun and vehicle","vehicle and machete","car, knife and mace","knife and vehicle")
+undetermined <- c("undetermined","unknown weapon","claimed to be armed")
+unarmed <- c("unarmed")
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+data_shoot[is.na(data_shoot$armed)==FALSE & data_shoot$armed %in% long_dis_death, "armed_level"] <- "long_dis_death"
+
+data_shoot[is.na(data_shoot$armed)==FALSE & data_shoot$armed %in% long_dis_not_death, "armed_level"] <- "long_dis_not_death"
+
+data_shoot[is.na(data_shoot$armed)==FALSE & data_shoot$armed %in% short_dis_death, "armed_level"] <- "short_dis_death"
+
+data_shoot[is.na(data_shoot$armed)==FALSE & data_shoot$armed %in% short_dis_not_death, "armed_level"] <- "short_dis_not_death"
+
+data_shoot[is.na(data_shoot$armed)==FALSE & data_shoot$armed %in% vehicles, "armed_level"] <- "vehicles"
+
+data_shoot[is.na(data_shoot$armed)==FALSE & data_shoot$armed %in% undetermined, "armed_level"] <- "undetermined"
+
+data_shoot[is.na(data_shoot$armed)==FALSE & data_shoot$armed %in% unarmed, "armed_level"] <- "unarmed"
+
+data_shoot$armed_level <- as.factor(data_shoot$armed_level)
+
+```
+
+For our variable "age", from the code book, this should be the categorical variable.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# For our variable armed
+# divide into several ranges
+
+
+
+# 0-18 pre-young, 18-35 young adulthood 35-55 middle age 55 older adulthood 
+
+unique(data_shoot$age)
+
+data_shoot[is.na(data_shoot$age)== FALSE & data_shoot$age > 0 & data_shoot$age <= 18, "age_group"] <- "(0-18) pre-young"
+
+
+data_shoot[is.na(data_shoot$age)== FALSE & data_shoot$age > 18 & data_shoot$age <= 35, "age_group"] <- "(18-35) young adulthood"
+
+
+data_shoot[is.na(data_shoot$age) == FALSE & data_shoot$age > 35 & data_shoot$age <= 55, "age_group"] <- "(35-55) middle age"
+
+
+data_shoot[is.na(data_shoot$age) == FALSE & data_shoot$age > 55, "age_group"] <- "(>55) older adulthood"
+
+
+unique(data_shoot$age_group)
+
+data_shoot$age_group <- as.factor(data_shoot$age_group)
+```
+
+For our variable "gender", from the code book, this should be the categorical variable.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# For our variable gender
+unique(data_shoot$gender)
+data_shoot$gender <- as.factor(data_shoot$gender)
+```
+
+For our variable "race", from the code book, this should be the categorical variable.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# For our variable armed
+unique(data_shoot$race)
+data_shoot$race <- as.factor(data_shoot$race)
+```
+
+For our variable "city", from the code book, this should be the categorical variable.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# For our variable armed
+length(unique(data_shoot$city))
+```
+
+For our variable "state", from the code book, this should be the categorical variable.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# For our variable armed
+unique(data_shoot$state)
+data_shoot$state <- as.factor(data_shoot$state)
+
+north_east <- c("MA", "RI", "CT", "VT", "NH", "ME", "PA", "NJ", "NY")
+south_east <- c("DC", "GA", "NC", "SC", "VA", "WV", "KY", "TN", "MS", "AL", "DE", "MD", "FL", "LA", "AR")
+mid_west <- c("MN", "WI", "IL", "OH", "IN", "MI", "MO", "IA", "KS", "NE", "ND", "SD")
+south_west <- c("NM", "AZ", "OK", "TX")
+the_west <- c("CA", "CO", "NV", "HI", "AK", "OR", "UT", "ID", "MT", "WY", "WA")
+
+data_shoot[is.na(data_shoot$state)==FALSE & data_shoot$state %in% north_east, "state_loc"] <- "north_east"
+
+data_shoot[is.na(data_shoot$state)==FALSE & data_shoot$state %in% south_east, "state_loc"] <- "south_east"
+
+data_shoot[is.na(data_shoot$state)==FALSE & data_shoot$state %in% mid_west, "state_loc"] <- "mid_west"
+
+data_shoot[is.na(data_shoot$state)==FALSE & data_shoot$state %in% south_west, "state_loc"] <- "south_west"
+
+data_shoot[is.na(data_shoot$state)==FALSE & data_shoot$state %in% the_west, "state_loc"] <- "the_west"
+
+unique(data_shoot$state_loc)
+
+data_shoot$state_loc <- as.factor(data_shoot$state_loc)
+
+```
+
+For our variable "signs_of_mental_illness", from the code book, this should be the categorical variable.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+unique(data_shoot$signs_of_mental_illness)
+data_shoot$signs_of_mental_illness <- as.factor(data_shoot$signs_of_mental_illness)
+```
+
+For our variable "threat_level", from the code book, this should be the categorical variable.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+unique(data_shoot$threat_level)
+data_shoot$threat_level <- as.factor(data_shoot$threat_level)
+```
+
+For our variable "flee", from the code book, this should be the categorical variable.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+unique(data_shoot$flee)
+data_shoot$flee <- as.factor(data_shoot$flee)
+```
+
+For our variable "body_camera", from the code book, this should be the categorical variable.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+unique(data_shoot$body_camera)
+data_shoot$body_camera <- as.factor(data_shoot$body_camera)
+```
+
+Now we have to create two new datasets, one for eda and analysis, one for creating model.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+names(data_shoot)
+```
+
+
+### Bring some outside data source
+
+US States by Race 2022 from world population review
+Link: https://worldpopulationreview.com/states/states-by-race
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+state_race <- read_csv("/Users/hanjunwei/Desktop/DATA 2020/Project/state_race.csv")
+
+```
+
+Let's reshape the data to better join the table
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+state_race_reform <- melt(state_race, id = c("State","Total"))
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+names(state_race_reform)<- c('state', 'Total_population', 'race', 'Race_population')
+
+state_race_reform
+```
+
+
+```{r}
+data_shoot <- merge(data_shoot, state_race_reform, by=c("state","race"),all.x=TRUE)
+
+data_shoot
+```
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+state_income <- read_csv("/Users/hanjunwei/Desktop/DATA 2020/Project/Personal_income_by_states.csv")
+
+```
+
+Let's reshape the data to better join the table
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+state_income_reform <- melt(state_income, id = c("state"))
+
+names(state_income_reform)<- c('state', 'year_qtr', 'personal_income_sum_whole_state')
+state_income_reform
+```
+
+
+
+```{r}
+library(zoo)
+data_shoot$year_qtr <- format(as.yearqtr(data_shoot$date, format = "%Y-%m-%d"), format = "%Y:Q%q")
+
+data_shoot <- merge(data_shoot, state_income_reform, by=c("state","year_qtr"),all.x=TRUE)
+
+data_shoot
+```
+
+```{r}
+data_shoot$avg_income = data_shoot$personal_income_sum_whole_state / data_shoot$Total_population * 1000000
+```
+
+
+################################################################################## Code ############################################################################################
+
+
+
+
+
+
+
+
+## Data Table (data wrangling)
+
+
+# Prepare Data
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+## Recreate dataset For Time Series
+# Convert to Date
+shoot_num = data_shoot
+shoot_num$count = 1
+shoot_num$date = as.Date(paste(format(shoot_num$date, "%Y-%m"),"-01",sep=""))
+
+
+# shoot_date
+shoot_date = shoot_num %>% group_by(state_loc, date) %>% summarise(avg_income = mean(avg_income))
+
+# shoot_num (assign income)
+shoot_num = shoot_num %>% dplyr::select(date, state_loc, race, count)
+shoot_num$income = 0
+for (d in 1:length(unique(shoot_num$date))){
+  for (s in unique(shoot_num$state_loc)){
+    shoot_num[shoot_num$date == toString(unique(shoot_num$date)[d]) & shoot_num$state_loc == s,]$income = shoot_date[shoot_date$date == toString(unique(shoot_num$date)[d]) & shoot_date$state_loc == s,]$avg_income
+  }
+}
+
+## adding count = zero row
+for (d in 1:length(unique(shoot_num$date))){
+  for (r in unique(shoot_num$race)){
+    for (s in unique(shoot_num$state_loc)){
+      if (nrow(shoot_num[shoot_num$date == toString(unique(shoot_num$date)[d]) & shoot_num$race == r & shoot_num$state_loc == s,]) == 0){
+        i = shoot_date[shoot_date$state_loc == s & shoot_date$date == toString(unique(shoot_num$date)[d]),]$avg_income
+        new_row = c(toString(unique(shoot_num$date)[d]) ,	s,	r, 0, i)
+        shoot_num = rbind(shoot_num, new_row)
+      }
+      
+    }
+  }
+}
+shoot_num
+
+# Cover miss number
+shoot_num[shoot_num$count == 0 & shoot_num$date == "2022-05-01",]$income = NA
+
+# Convert type
+shoot_num$income = as.numeric(shoot_num$income)
+shoot_num$count = as.numeric(shoot_num$count)
+# Check
+#unique(shoot_num$income)
+#summary(as.numeric(shoot_num$income))
+#shoot_num
+
+## Cumulate
+shoot_num = shoot_num %>% group_by(date, race, state_loc, income) %>% summarise(counts = sum(as.numeric(count)))
+shoot_num
+```
+```{r}
+# test data
+test = shoot_num
+```
+
+# Assign ID
+```{r}
+# Assign ID
+#shoot_num
+id = 1
+for (i in unique(shoot_num$race)){
+  for (j in unique(shoot_num$state_loc)){
+    shoot_num[shoot_num$race %in% i & shoot_num$state_loc %in% j,"ID"] = id
+    id = id + 1
+
+  }
+}
+shoot_num$ID = as.factor(shoot_num$ID)
+
+shoot_num = data.frame(shoot_num %>% dplyr::select(ID, date, race, state_loc, income, counts))
+
+# select observations between 2015 to 2021
+shoot_num = shoot_num %>% filter(date <'2022-01-01')
+head(shoot_num)
+```
+
+
+
+
+
+################################### Mixed Effect #######################################
+
+# Loading Library
+
+```{r}
+library(lme4)
+library(sjPlot)
+library(glmmTMB)
+library(flexplot)
+library(vcd)
+library(tidyverse)
+library(ggplot2)
+library(tidyr)
+library(broom)
+library(car)
+library(Boruta)
+library(gridExtra)
+library(MuMIn)
+library(MASS)
+library(usdata)
+```
+
+
+
+# Data Set (omit na)
+```{r}
+shoot_num = na.omit(shoot_num)
+dim(shoot_num)
+shoot_num[35:40,]
+```
+
+### expore the additional effect
+
+## Plot (income vs. region)
+
+
+```{r}
+shoot_num %>%
+  # prepare data
+  dplyr::select(state_loc, income) %>%
+  dplyr::group_by(state_loc) %>%
+  dplyr::mutate(Mean = round(mean(income), 1)) %>%
+  dplyr::mutate(SD = round(sd(income), 1)) %>% ggplot(aes(state_loc, income, color = state_loc, fill = state_loc)) + geom_violin(trim=FALSE, color = "gray20") + 
+  geom_boxplot(width=0.1, fill="white", color = "gray20")  +
+  geom_text(aes(y=15000,label=paste("mean: ", Mean, sep = "")), size = 3, color = "black") +   geom_text(aes(y=10000,label=paste("SD: ", SD, sep = "")), size = 3, color = "black") + 
+  theme_set(theme_bw(base_size = 10)) +
+  ylim(9000, 100000) +
+  labs(x = "Region", y = "Income") +  theme(text = element_text(size = 27)) 
+```
+The monthly average income for each group
+
+
+
+
+
+Poisson regressions are particularly appealing when dealing with rare events, i.e. when something only occurs very infrequently. In such cases, normal linear regressions do not work because the instances that do occur are automatically considered outliers. Therefore, it is useful to check if the data conform to a Poisson distribution.
+
+
+## Try poisson
+```{r}
+gf = goodfit(shoot_num$counts,type= "poisson", method = "ML")
+plot(gf, main="Shooting data vs Poisson Distribution")
+summary(gf)
+```
+## Try negative Binomial
+
+```{r}
+gf = goodfit(shoot_num$counts,type= "nbinomial", method = "ML")
+plot(gf, main="Shooting data vs Negative Binomial Distribution")
+summary(gf)
+```
+
+The p-value is indeed smaller than .05 which means that we should indeed use a negative-binomial model rather than a Poisson model. We will ignore this, for now, and proceed to fit a Poisson mixed-effects model and check what happens if a Poisson model is fit to over-dispersed data.
+
+If the p-values is smaller than .05, then data is not Poisson distributed which means that it differs significantly from a Poisson distribution and is very likely over-dispersed. We will check the divergence from a Poisson distribution visually by plotting the observed counts against the expected counts if the data were Poisson distributed.
+
+Although the goodfit function reported that the data differs significantly from the Poisson distribution, the fit is rather good. We can use an additional Levene’s test to check if variance homogeneity is given.
+
+
+
+
+
+# scale numerical data for modeling
+```{r}
+# model data
+mod_data = shoot_num%>% filter(date < "2021-01-01")
+mod_data$income = scale(mod_data$income)
+mod_data$date = scale(mod_data$date)
+
+#Test data
+test_data = shoot_num%>% filter(date >= "2021-01-01")
+test_data$income = scale(test_data$income)
+test_data$date = scale(test_data$date)
+
+```
+
+
+ Boruta skeem
+```{r}
+# perform variable selection
+set.seed(20191220)
+boruta <- Boruta(counts ~.,data=mod_data%>% dplyr::select(date, race, income, state_loc, counts))
+print(boruta)
+```
+
+# modeling (baseline model)
+```{r}
+# base-line mixed-model
+m_baseline = glmer.nb(counts ~ 1+ (1 | state_loc), data = mod_data) 
+m_full = glmer.nb(counts ~ income + race + date + (1 | state_loc), data = mod_data) 
+m_reduce = glmer.nb(counts ~ race + (1 | state_loc), data = mod_data) 
+```
+The ANOVA confirms that income have a significant impact on the number of instances of shoot counts
+
+# baseline
+```{r}
+visualize(m_baseline, "model")
+```
+```{r}
+Anova(m_full, test = "Chi") 
+Anova(m_reduce, test = "Chi")
+```
+
+# full vs reduce
+```{r}
+compare.fits(counts ~ race | income + date , data = mod_data, m_full, m_reduce, jetter = c(0,0.1))
+```
+
+
+# mixed effect graph 1
+```{r}
+visualize(m_reduce, plot = "model")
+```
+# Mixed effect graph 2
+```{r}
+visualize(m_reduce, plot = "model") +  theme(text = element_text(size = 30)) 
+```
+
+
+## 问题 为什么用 state 作为 random effect
+
+```{r}
+m_reduce_income = glmer.nb(counts ~ income+race+ (1 | state_loc), data = mod_data)
+Anova(m_reduce_income)
+```
+
+
+```{r}
+summary(m_reduce)
+```
+
+
+```{r}
+# extract pearson residuals
+PearsonResiduals <- resid(m_reduce, type = "pearson")
+# extract number of cases in model
+Cases <- nrow(mod_data)
+# extract number of predictors (plus intercept)
+NumberOfPredictors <- length(fixef(m_reduce)) +1
+
+# calculate overdispersion
+Overdispersion <- sum(PearsonResiduals^2) / (Cases-NumberOfPredictors)
+
+# inspect overdispersion
+Overdispersion
+```
+
+The data is less than one (good). It would also be advisable to plot the Cook’s distance (which should not show data points with values > 1). If there are data points with high Cook’s D values, we could exclude them which would, very likely reduce the overdispersion (see Zuur, Hilbe, and Ieno 2013, 22). We ignore this, for now, and use diagnostic plots to check if the plots indicate problems.
+
+```{r}
+diag_data <- data.frame(PearsonResiduals, fitted(m_reduce)) %>%
+  dplyr::rename(Pearson = 1,Fitted = 2)
+p9 <- ggplot(diag_data, aes(x = Fitted, y = Pearson)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dotted")
+p10 <- ggplot(mod_data, aes(x = race, y = diag_data$Pearson)) +
+  geom_point()  +
+  geom_hline(yintercept = 0, linetype = "dotted") +
+  labs(y = "Pearson")
+p11 <- ggplot(mod_data, aes(x = state_loc, y = diag_data$Pearson)) +
+  geom_boxplot() +
+  labs(y = "Pearson") + 
+  theme(axis.text.x = element_text(angle=90))
+grid.arrange(p9, p11, nrow = 1)
+```
+```{r}
+qqplot(m_reduce)
+```
+
+
+```{r}
+summary(m_reduce)
+```
+```{r}
+plot(m_reduce, pch = 20, col = "black", lty= "dotted", ylab = "Pearson's residuals")
+```
+```{r}
+plot(m_reduce, state_loc ~ resid(.), abline = 0, fill = "gray70")
+```
+
+
+```{r}
+plot_model(m_reduce, type = "pred", terms = c("race"))  +  theme(text = element_text(size = 30)) 
+```
+
+
+```{r}
+mod_data %>%
+  mutate(Predicted = predict(m_reduce, type = "response")) %>%
+  dplyr::rename(Observed = counts) %>%
+  tidyr::gather(Type, Frequency, c(Observed, Predicted)) %>%
+  dplyr::mutate(race = factor(race),
+                Type = factor(Type)) %>%
+  dplyr::group_by(race, Type) %>%
+  dplyr::summarize(Frequency = mean(Frequency)) %>%
+  ggplot(aes(race, Frequency, group = Type, color = Type, linetype = Type)) +
+  geom_line(size = 1.2) +
+  scale_color_manual(values = c("orange", "lightblue")) 
+```
+
+
+
+```{r}
+sjPlot::tab_model(m_reduce)
+```
+
+
+
+# qqplot
+```{r}
+qqplot(residuals(m_reduce), qnorm(ppoints(nrow(mod_data))))
+qqplot(residuals(m_reduce), qnorm(ppoints(nrow(mod_data))))
+```
+
+
+```{r}
+plot(m_reduce)
+```
+
+
+```{r}
+ranef(m_full)
+fixef(m_full)
+```
+
+```{r}
+test_1 = test %>% dplyr::select(date, race, state_loc, counts) %>% filter(date >= "2021-01-01"& date < "2021-02-01")
+
+test_1
+```
+
+
+
+
+
+
+
+
+```{r}
+state_race <- data_shoot %>% group_by(state_loc, race) %>% summarise("1" )
+na.omit(state_race)
+state_race = state_race %>% dplyr::select(state_loc,race)
+```
+```{r}
+state_race = na.omit(state_race)
+```
+
+
+```{r}
+result = data.frame(round(exp(predict(m_reduce, data.frame(test_data %>% dplyr::select( race, state_loc))))))
+colnames(result)[1]="predicted counts"
+result$`actual counts` = test_data$counts
+result
+```
+```{r}
+round(exp(predict(m_reduce, data.frame(test_data %>% dplyr::select(date, race, state_loc)))))
+```
+
+```{r}
+
+sum(abs(test_data$counts - round(exp(predict(m_reduce, data.frame(test_data %>% dplyr::select(date, race, state_loc)))))))
+```
+
+
+
+
+
+
+```{r}
+test_data
+```
+
+
+
+##############################################################################################################################################################################################################################################################################
+
+
+```{r}
+# base-line mixed-model
+m_relationship = glmer.nb(counts ~ income + (1 | state_loc), data = mod_data) 
+Anova(m_relationship)
+summary(m_relationship)
+```
+```{r}
+visualize(m_relationship, "model") +  theme(text = element_text(size = 30)) 
+```
+
+
+
+
+```{r}
+# extract pearson residuals
+PearsonResiduals <- resid(m_relationship, type = "pearson")
+# extract number of cases in model
+Cases <- nrow(mod_data)
+# extract number of predictors (plus intercept)
+NumberOfPredictors <- length(fixef(m_relationship)) +1
+# calculate overdispersion
+Overdispersion <- sum(PearsonResiduals^2) / (Cases-NumberOfPredictors)
+# inspect overdispersion
+Overdispersion
+```
+
+The data is less than one (good). It would also be advisable to plot the Cook’s distance (which should not show data points with values > 1). If there are data points with high Cook’s D values, we could exclude them which would, very likely reduce the overdispersion (see Zuur, Hilbe, and Ieno 2013, 22). We ignore this, for now, and use diagnostic plots to check if the plots indicate problems.
+
+```{r}
+diag_data <- data.frame(PearsonResiduals, fitted(m_relationship)) %>%
+  dplyr::rename(Pearson = 1,
+                Fitted = 2)
+p9 <- ggplot(diag_data, aes(x = Fitted, y = Pearson)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dotted")
+p10 <- ggplot(mod_data, aes(x = income, y = diag_data$Pearson)) +
+  geom_point()  +
+  geom_hline(yintercept = 0, linetype = "dotted") +
+  labs(y = "Pearson")
+p11 <- ggplot(mod_data, aes(x = state_loc, y = diag_data$Pearson)) +
+  geom_boxplot() +
+  labs(y = "Pearson") + 
+  theme(axis.text.x = element_text(angle=90))
+grid.arrange(p9, p10, p11, nrow = 1)
+```
+
+
+
+
+```{r}
+plot_model(m_relationship, type = "pred", terms = c("income"))
+```
+
+
+```{r}
+mod_data %>%
+  mutate(Predicted = predict(m_relationship, type = "response")) %>%
+  dplyr::rename(Observed = counts) %>%
+  tidyr::gather(Type, Frequency, c(Observed, Predicted)) %>%
+  dplyr::mutate(income = factor(income),
+                Type = factor(Type)) %>%
+  dplyr::group_by(income, Type) %>%
+  dplyr::summarize(Frequency = mean(Frequency)) %>%
+  ggplot(aes(income, Frequency, group = Type, color = Type, linetype = Type)) +
+  geom_line(size = 1.2) +
+  scale_color_manual(values = c("orange", "lightblue")) 
+```
+
+
+
+```{r}
+sjPlot::tab_model(m_relationship)
+```
+
+
+
+```{r}
+b1 = glm.nb(counts ~1, mod_data)
+b2 = glmer.nb(counts ~1+(1|state_loc), mod_data)
+```
+
+```{r}
+compare.fits(counts~state_loc, data = mod_data,m_baseline,m_relationship)
+```
+
+
+
+
+
+
+

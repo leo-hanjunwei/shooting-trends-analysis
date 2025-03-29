@@ -36,7 +36,6 @@ After the underreporting of police fatal shootings came to light following the 2
 ```
 ├── data/              # Raw and cleaned datasets
 ├── scripts/           # R scripts for data cleaning, EDA, modeling
-├── figures/           # EDA plots, time series graphs, model diagnostics
 ├── report/            # Presentation and write-up files
 └── README.md
 ```
